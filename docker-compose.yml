@@ -1,0 +1,139 @@
+services:
+
+  attacker:
+    build:
+      context: ./config/attacker
+      dockerfile: Dockerfile
+    container_name: attacker
+    hostname: attacker
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      attack-net:
+        ipv4_address: 10.0.1.10
+    command: >
+      sh -c "
+        ip route del default 2>/dev/null;
+        ip route add default via 10.0.1.1 &&
+        echo '[+] Attacker ready' &&
+        tail -f /dev/null
+      "
+
+  router:
+    build:
+      context: ./config/router
+      dockerfile: Dockerfile
+    container_name: router
+    hostname: router
+    privileged: true
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.forwarding=1
+      - net.ipv4.conf.all.rp_filter=0
+      - net.ipv4.conf.default.rp_filter=0
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_ADMIN
+    networks:
+      attack-net:
+        ipv4_address: 10.0.1.1
+      target-net:
+        ipv4_address: 10.0.2.1
+      mgmt-net:
+        ipv4_address: 10.0.3.1
+    command: >
+      sh -c "
+        node_exporter --collector.disable-defaults --collector.netdev --web.listen-address=:9101 &
+        rustflow_exporter -i eth0 -H 10.0.3.40 -p 9995 --promiscuous &
+        exec flowspecd --listen 10.0.3.1:179 --my-as 65001 --bgp-id 10.0.3.1 --metrics-port 9100
+      "
+
+  exabgp:
+    build:
+      context: ./config/exabgp
+      dockerfile: Dockerfile
+    container_name: exabgp
+    hostname: exabgp
+    cap_add:
+      - NET_ADMIN
+    networks:
+      mgmt-net:
+        ipv4_address: 10.0.3.10
+    volumes:
+      - exabgp-pipe:/tmp/exabgp
+
+  target:
+    build:
+      context: ./config/target
+      dockerfile: Dockerfile
+    container_name: target
+    hostname: target
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      target-net:
+        ipv4_address: 10.0.2.10
+    command: >
+      sh -c "
+        ip route del default 2>/dev/null;
+        ip route add default via 10.0.2.1 &&
+        echo '[+] Target ready' &&
+        tail -f /dev/null
+      "
+
+  collector:
+    build:
+      context: ./config/collector
+      dockerfile: Dockerfile
+    container_name: collector
+    hostname: collector
+    networks:
+      mgmt-net:
+        ipv4_address: 10.0.3.40
+    command: >
+      rustflow_collector -t netflow -p 9995 -f common --metrics-port 9102
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    networks:
+      mgmt-net:
+        ipv4_address: 10.0.3.20
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+networks:
+  attack-net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-attack
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+          gateway: 10.0.1.254
+  target-net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-target
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.0.2.0/24
+          gateway: 10.0.2.254
+  mgmt-net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-mgmt
+    ipam:
+      config:
+        - subnet: 10.0.3.0/24
+          gateway: 10.0.3.254
+
+volumes:
+  exabgp-pipe:
