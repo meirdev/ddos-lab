@@ -37,22 +37,23 @@ router. `flowspecd` installs them as nftables rules in `table inet flowspec`
 attack traffic.
 
 **Observability:**
+
 - `flowspecd` exposes Prometheus metrics on the router at `:9100`.
 - `node_exporter` exposes host/NIC metrics on the router at `:9101`.
-- `rustflow_exporter` (router) sends NetFlow records to the `rustflow_collector`
+- `rustflow export` (router) sends NetFlow records to the `rustflow collect`
   (`collector`, `:9995`).
 - `prometheus` (`:9090`, published to the host) scrapes the router exporters.
 
 ## Components
 
-| Container    | Address     | Role |
-|--------------|-------------|------|
-| `attacker`   | 10.0.1.10   | Generates attack traffic with `rping` |
+| Container    | Address            | Role                                                    |
+| ------------ | ------------------ | ------------------------------------------------------- |
+| `attacker`   | 10.0.1.10          | Generates attack traffic with `rping`                   |
 | `router`     | .1.1 / .2.1 / .3.1 | Linux router running `flowspecd` (nftables) + exporters |
-| `target`     | 10.0.2.10   | Victim host (runs `tcpdump`; no services) |
-| `exabgp`     | 10.0.3.10   | BGP speaker (AS 65002) announcing FlowSpec rules |
-| `collector`  | 10.0.3.40   | `rustflow_collector` — receives NetFlow |
-| `prometheus` | 10.0.3.20   | Scrapes router metrics (host port 9090) |
+| `target`     | 10.0.2.10          | Victim host (runs `tcpdump`; no services)               |
+| `exabgp`     | 10.0.3.10          | BGP speaker (AS 65002) announcing FlowSpec rules        |
+| `collector`  | 10.0.3.40          | `rustflow collect` — receives NetFlow                   |
+| `prometheus` | 10.0.3.20          | Scrapes router metrics (host port 9090)                 |
 
 ## Quick Start
 
@@ -161,12 +162,12 @@ The matching nftables rule disappears from `table inet flowspec`.
 
 ## Available Scripts
 
-| Script | Description |
-|--------|-------------|
-| `scripts/attack.sh <type> [args]` | Launch attack with rping: `syn-flood`, `udp-flood`, `icmp-flood`, `spoof-flood`, or `custom` |
-| `scripts/mitigate.sh <rule>` | Announce a FlowSpec rule: `block-syn`, `block-udp`, `block-icmp`, `block-all`, `rate-limit`, `custom` |
-| `scripts/withdraw.sh <rule>` | Withdraw a previously announced FlowSpec rule |
-| `scripts/status.sh` | Lab health: containers, connectivity, active nft rules, monitoring |
+| Script                            | Description                                                                                           |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `scripts/attack.sh <type> [args]` | Launch attack with rping: `syn-flood`, `udp-flood`, `icmp-flood`, `spoof-flood`, or `custom`          |
+| `scripts/mitigate.sh <rule>`      | Announce a FlowSpec rule: `block-syn`, `block-udp`, `block-icmp`, `block-all`, `rate-limit`, `custom` |
+| `scripts/withdraw.sh <rule>`      | Withdraw a previously announced FlowSpec rule                                                         |
+| `scripts/status.sh`               | Lab health: containers, connectivity, active nft rules, monitoring                                    |
 
 ## Sending Custom FlowSpec Rules
 
@@ -262,18 +263,21 @@ docker compose down -v
 ## Troubleshooting
 
 **BGP session not establishing:**
+
 - Wait 20–60s after startup.
 - `docker logs router` — look for the FSM reaching established / keepalives.
 - `docker logs exabgp` — look for `connected to peer-1` and no config errors.
 - Connectivity: `docker exec exabgp ping -c1 10.0.3.1`.
 
 **FlowSpec rules not appearing as nft rules:**
+
 - Confirm the BGP session is up first.
 - `docker logs exabgp` — confirm `[flowspec-api] Sending:` shows your rule.
 - `docker logs router` — confirm `Received UPDATE` / `FlowSpec ADD` / `Applied to nftables`.
 - `docker exec router nft list table inet flowspec`.
 
 **Attacker can't reach target:**
+
 - Routes: `docker exec attacker ip route` (default should be via 10.0.1.1).
 - Forwarding: `docker exec router sysctl net.ipv4.ip_forward` (should be 1).
 - Check no `block-all` rule is still active in `table inet flowspec`.
