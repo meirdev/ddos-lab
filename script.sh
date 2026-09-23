@@ -15,6 +15,7 @@ Attacks:
   udp-flood          UDP flood to target port 53
   icmp-flood         ICMP flood
   spoof-flood        Spoofed source IP flood to target port 80
+  stop-attack        Stop all running attacks in the attacker container
 
 Mitigation:
   mitigate-syn      Block TCP SYN traffic to target port 80
@@ -43,6 +44,7 @@ Checks:
 Examples:
   ./script.sh syn-flood
   ./script.sh mitigate-syn
+  ./script.sh stop-attack
   ./script.sh withdraw-syn
   ./script.sh connectivity
 HELP
@@ -70,6 +72,17 @@ run_attack() {
     esac
     docker compose exec -d -T attacker rping -I "$IFACE" --dst-ip "$TARGET" "${args[@]}" --flood --quiet
     printf 'Started %s flood in the background.\n' "$type"
+}
+
+stop_attack() {
+    docker compose exec -T attacker sh -c '
+        if pidof rping >/dev/null; then
+            killall -INT rping || exit 1
+            echo "Stop signal sent to all running attacks."
+        else
+            echo "No attacks are running."
+        fi
+    '
 }
 
 send_rule() {
@@ -103,6 +116,7 @@ case "$command" in
     syn-flood|udp-flood|icmp-flood|spoof-flood)
         run_attack "${command%-flood}"
         ;;
+    stop-attack) stop_attack ;;
     mitigate-syn|mitigate-udp|mitigate-icmp|mitigate-all|mitigate-rate)
         send_rule announce "${command#mitigate-}"
         ;;
