@@ -4,7 +4,8 @@ RUN apk add --no-cache \
         tcpdump \
         curl \
         nftables \
-        python3
+        python3 \
+        hping3
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
