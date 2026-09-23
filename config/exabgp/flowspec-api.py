@@ -20,7 +20,7 @@ def main():
                         sys.stderr.flush()
                         sys.stdout.write(line + "\n")
                         sys.stdout.flush()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             sys.stderr.write(f"[flowspec-api] Error: {e}\n")
             sys.stderr.flush()
 

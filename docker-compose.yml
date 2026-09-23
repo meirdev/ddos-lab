@@ -1,8 +1,12 @@
+x-node: &node
+  build:
+    context: ./config
+    dockerfile: Dockerfile
+  image: ddos-lab-node:latest
+
 services:
   attacker:
-    build:
-      context: ./config/attacker
-      dockerfile: Dockerfile
+    <<: *node
     container_name: attacker
     hostname: attacker
     cap_add:
@@ -20,9 +24,7 @@ services:
       "
 
   router:
-    build:
-      context: ./config/router
-      dockerfile: Dockerfile
+    <<: *node
     container_name: router
     hostname: router
     privileged: true
@@ -50,9 +52,7 @@ services:
       "
 
   exabgp:
-    build:
-      context: ./config/exabgp
-      dockerfile: Dockerfile
+    <<: *node
     container_name: exabgp
     hostname: exabgp
     cap_add:
@@ -62,11 +62,10 @@ services:
         ipv4_address: 10.0.3.10
     volumes:
       - exabgp-pipe:/tmp/exabgp
+    command: exabgp /etc/exabgp/exabgp.conf
 
   target:
-    build:
-      context: ./config/target
-      dockerfile: Dockerfile
+    <<: *node
     container_name: target
     hostname: target
     cap_add:
@@ -84,9 +83,7 @@ services:
       "
 
   collector:
-    build:
-      context: ./config/collector
-      dockerfile: Dockerfile
+    <<: *node
     container_name: collector
     hostname: collector
     networks:
