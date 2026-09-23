@@ -63,10 +63,10 @@ run_attack() {
     local type="$1"
     local -a args
     case "$type" in
-        syn)   args=(--dst-port 80) ;;
-        udp)   args=(--dst-port 53) ;;
+        syn)   args=(--tcp -S --dst-port 80) ;;
+        udp)   args=(--udp --dst-port 53) ;;
         icmp)  args=(--icmp) ;;
-        spoof) args=(-S --src-ip 10.0.1.0/24 --spoof --dst-port 80) ;;
+        spoof) args=(--tcp -S --src-ip 10.0.1.0/24 --dst-port 80) ;;
     esac
     docker compose exec attacker rping -I "$IFACE" --dst-ip "$TARGET" "${args[@]}" --flood
 }
