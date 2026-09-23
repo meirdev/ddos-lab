@@ -6,6 +6,7 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 IFACE="eth0"           # attacker's only NIC (attack-net)
 TARGET="10.0.2.10"     # target host behind the router
 ATTACK_INTERVAL="10ms" # delay between packets (~100 packets/sec per attack)
+STATS_INTERVAL=2       # seconds between interface statistics polls
 
 usage() {
     cat <<'HELP'
@@ -41,6 +42,7 @@ Checks:
   connectivity      Run all three connectivity checks
   bgp               Show recent BGP / FlowSpec log activity
   rules             Show active FlowSpec rules
+  stats             Poll attacker TX, router RX/TX, and target RX (Ctrl+C to exit)
 
   -h, --help        Show this help
 
@@ -50,6 +52,7 @@ Examples:
   ./script.sh stop-attack
   ./script.sh withdraw-syn
   ./script.sh connectivity
+  ./script.sh stats
 HELP
 }
 
@@ -88,6 +91,65 @@ stop_attack() {
     '
 }
 
+read_stats() {
+    local container="$1" address="$2" direction="$3"
+    docker compose exec -T "$container" sh -eu -c '
+        iface=$(ip -o -4 addr show | awk -v address="$1" '\''
+            { split($4, ip, "/"); if (ip[1] == address) { print $2; exit } }
+        '\'')
+        iface=${iface%%@*}
+        if [ -z "$iface" ]; then
+            echo "No interface found for $1" >&2
+            exit 1
+        fi
+        path="/sys/class/net/$iface/statistics/$2"
+        read -r uptime rest < /proc/uptime
+        read -r packets < "${path}_packets"
+        read -r bytes < "${path}_bytes"
+        read -r dropped < "${path}_dropped"
+        read -r errors < "${path}_errors"
+        printf "%s %s %s %s %s %s\n" "$iface" "$uptime" \
+            "$packets" "$bytes" "$dropped" "$errors"
+    ' sh "$address" "$direction"
+}
+
+poll_stats() {
+    local -a containers=(attacker router router target)
+    local -a addresses=(10.0.1.10 10.0.1.1 10.0.2.1 "$TARGET")
+    local -a directions=(tx rx tx rx)
+    local -a previous=()
+    local i sample rows row
+    while true; do
+        rows=""
+        for i in "${!containers[@]}"; do
+            sample=$(read_stats "${containers[i]}" "${addresses[i]}" "${directions[i]}") || return 1
+            row=$(awk -v current="$sample" -v previous="${previous[i]:-}" \
+                -v container="${containers[i]}" -v direction="${directions[i]}" '
+                BEGIN {
+                    split(current, c); split(previous, p)
+                    pps = mbps = "-"
+                    elapsed = c[2] - p[2]
+                    if (previous != "" && c[1] == p[1] && elapsed > 0 &&
+                        c[3] >= p[3] && c[4] >= p[4]) {
+                        pps = sprintf("%.1f", (c[3] - p[3]) / elapsed)
+                        mbps = sprintf("%.3f", (c[4] - p[4]) * 8 / elapsed / 1000000)
+                    }
+                    printf "%-10s %-10s %-3s %10s %10s %14s %14s %10s %10s",
+                        container, c[1], direction, pps, mbps, c[3], c[4], c[5], c[6]
+                }')
+            rows+="$row"$'\n'
+            previous[i]="$sample"
+        done
+        if [[ -t 1 ]]; then printf '\033[H\033[J'; fi
+        printf 'Interface stats · %s · polling every %ss · Ctrl+C to exit\n' "$(date '+%H:%M:%S')" "$STATS_INTERVAL"
+        printf 'Rates use elapsed sample time; totals include all interface traffic.\n'
+        printf '%-10s %-10s %-3s %10s %10s %14s %14s %10s %10s\n' \
+            Container Interface Dir Packets/s Mbit/s Packets Bytes Drops Errors
+        printf '%s\n' "$rows"
+        sleep "$STATS_INTERVAL"
+    done
+}
+
 send_rule() {
     local action="$1" rule="$2" match effect="discard;"
     case "$rule" in
@@ -120,6 +182,7 @@ case "$command" in
         run_attack "${command%-flood}"
         ;;
     stop-attack) stop_attack ;;
+    stats) poll_stats ;;
     mitigate-syn|mitigate-udp|mitigate-icmp|mitigate-all|mitigate-rate)
         send_rule announce "${command#mitigate-}"
         ;;
