@@ -25,7 +25,7 @@ withdraw_flowspec() {
     local cmd="$1"
     echo -e "${YELLOW}[-] Withdrawing FlowSpec rule:${NC}"
     echo "    $cmd"
-    docker exec exabgp bash -c "echo '$cmd' > /var/run/exabgp.cmd"
+    docker exec exabgp sh -c "echo '$cmd' > /var/run/exabgp.cmd"
     echo -e "${GREEN}[+] Withdrawal sent.${NC}"
 }
 

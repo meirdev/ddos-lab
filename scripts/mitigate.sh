@@ -31,7 +31,7 @@ send_flowspec() {
     local cmd="$1"
     echo -e "${GREEN}[+] Sending FlowSpec rule:${NC}"
     echo "    $cmd"
-    docker exec exabgp bash -c "echo '$cmd' > /var/run/exabgp.cmd"
+    docker exec exabgp sh -c "echo '$cmd' > /var/run/exabgp.cmd"
     echo -e "${GREEN}[+] Rule sent. flowspecd should install an nftables rule:${NC}"
     echo "    docker exec router nft list table inet flowspec"
     echo "    docker logs --tail 10 router"
