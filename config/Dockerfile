@@ -11,7 +11,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 RUN set -eux; \
     curl -fsSL -o /usr/local/bin/rping \
-        https://github.com/meirdev/rping/releases/download/v0.6.0/rping; \
+        https://github.com/meirdev/rping/releases/download/v0.7.0/rping; \
     curl -fsSL -o /usr/local/bin/flowspecd \
         https://github.com/meirdev/flowspecd/releases/download/v0.1.0-dev/flowspecd; \
     curl -fsSL -o /usr/local/bin/rustflow \
