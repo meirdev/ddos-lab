@@ -6,7 +6,7 @@ monitoring. The topology is defined in [docker-compose.yml](docker-compose.yml).
 ## Architecture
 
 ```text
-attacker                  router                     target
+attacker                  router (AS 65001)          target
 10.0.1.10 ── attack-net ── 10.0.1.1
                            10.0.2.1 ── target-net ── 10.0.2.10
                            10.0.3.1
@@ -14,6 +14,7 @@ attacker                  router                     target
                             mgmt-net
                   ┌────────────┼─────────────┐
                exabgp      prometheus     collector
+             (AS 65002)
              10.0.3.10     10.0.3.20      10.0.3.40
 ```
 
@@ -38,14 +39,3 @@ attacker                  router                     target
 `10.0.1.1` as its default gateway, and the target uses `10.0.2.1`, so traffic
 between them passes through the router. Docker's bridge gateways use `.254`
 on each subnet.
-
-- **Traffic:** `attacker` → `router` → `target`, with replies routed back through
-  the router. The router applies FlowSpec rules to drop or rate-limit matching
-  traffic.
-- **BGP:** `exabgp` (AS 65002) peers with `router` (AS 65001) at
-  `10.0.3.1:179`, using IPv4 unicast and FlowSpec address families.
-- **Metrics:** `prometheus` scrapes `router:9100` (FlowSpec metrics) and
-  `router:9101` (network-interface metrics). Its web interface is published on host port
-  `9090`.
-- **NetFlow:** The router exports records to `collector:9995`. The collector
-  also exposes metrics on port `9102`, which Prometheus does not currently scrape.
