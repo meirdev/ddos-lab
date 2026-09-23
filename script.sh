@@ -68,7 +68,8 @@ run_attack() {
         icmp)  args=(--icmp) ;;
         spoof) args=(--tcp -S --src-ip 10.0.1.0/24 --dst-port 80) ;;
     esac
-    docker compose exec attacker rping -I "$IFACE" --dst-ip "$TARGET" "${args[@]}" --flood
+    docker compose exec -d -T attacker rping -I "$IFACE" --dst-ip "$TARGET" "${args[@]}" --flood --quiet
+    printf 'Started %s flood in the background.\n' "$type"
 }
 
 send_rule() {
