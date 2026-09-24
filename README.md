@@ -1,39 +1,41 @@
 # DDoS & BGP FlowSpec Mitigation Lab
 
-Six containers simulate traffic generation, routing, FlowSpec mitigation, and
-monitoring. The topology is defined in [docker-compose.yml](docker-compose.yml).
+Five containers simulate traffic generation, routing, FlowSpec mitigation, and
+NetFlow collection. The topology is defined in [docker-compose.yml](docker-compose.yml).
 
 ## Architecture
 
-```text
-attacker                  router (AS 65001)          target
-10.0.1.10 ── attack-net ── 10.0.1.1
-                           10.0.2.1 ── target-net ── 10.0.2.10
-                           10.0.3.1
-                               │
-                            mgmt-net
-                  ┌────────────┼─────────────┐
-               exabgp      prometheus     collector
-             (AS 65002)
-             10.0.3.10     10.0.3.20      10.0.3.40
+Solid arrows are the data plane; dotted arrows are control and telemetry.
+Each box groups the containers that share a Docker bridge network.
+
+```mermaid
+flowchart LR
+    router["router — AS 65001<br/>attack-net 10.0.1.1<br/>target-net 10.0.2.1<br/>mgmt-net 10.0.3.1"]
+
+    subgraph attacknet["attack-net · 10.0.1.0/24 · internal"]
+        attacker["attacker<br/>10.0.1.10"]
+    end
+    subgraph targetnet["target-net · 10.0.2.0/24 · internal"]
+        target["target<br/>10.0.2.10"]
+    end
+    subgraph mgmtnet["mgmt-net · 10.0.3.0/24"]
+        exabgp["exabgp — AS 65002<br/>10.0.3.10"]
+        collector["collector<br/>10.0.3.40"]
+    end
+
+    attacker -->|attack traffic| router
+    router -->|forwarded traffic| target
+    exabgp -.->|FlowSpec over BGP| router
+    router -.->|NetFlow records| collector
 ```
 
-| Container    | Role                                                                                             |
-| ------------ | ------------------------------------------------------------------------------------------------ |
-| `attacker`   | Generates traffic.                                                                               |
-| `router`     | Routes and filters traffic between the attacker and target; exports metrics and NetFlow records. |
-| `target`     | Receives traffic                                                                                 |
-| `exabgp`     | Announces FlowSpec rules to the router over BGP.                                                 |
-| `prometheus` | Scrapes the router's FlowSpec and network-interface metrics.                                     |
-| `collector`  | Receives NetFlow records from the router.                                                        |
-
-## Network topology
-
-| Docker bridge network | Subnet        | Connected containers                          |
-| --------------------- | ------------- | --------------------------------------------- |
-| `attack-net`          | `10.0.1.0/24` | `attacker`, `router`                          |
-| `target-net`          | `10.0.2.0/24` | `router`, `target`                            |
-| `mgmt-net`            | `10.0.3.0/24` | `router`, `exabgp`, `prometheus`, `collector` |
+| Container   | Role                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| `attacker`  | Generates traffic.                                                                               |
+| `router`    | Routes and filters traffic between the attacker and target; exports metrics and NetFlow records. |
+| `target`    | Receives traffic                                                                                 |
+| `exabgp`    | Announces FlowSpec rules to the router over BGP.                                                 |
+| `collector` | Receives NetFlow records from the router.                                                        |
 
 `attack-net` and `target-net` are internal Docker networks. The attacker uses
 `10.0.1.1` as its default gateway, and the target uses `10.0.2.1`, so traffic
